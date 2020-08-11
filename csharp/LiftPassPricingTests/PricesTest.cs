@@ -4,6 +4,7 @@ using Nancy;
 using Nancy.Testing;
 using LiftPassPricing;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace LiftPassPricingTests
 {
@@ -61,11 +62,11 @@ namespace LiftPassPricingTests
             Assert.Equal(expectedCost, json.Cost);
         }
 
-        [Fact(Skip="ignored")]
+        [Fact]
         public void DefaultNightCost()
         {
             Response json = ObtainPrice("type", "night");
-            Assert.Equal(19, json.Cost);
+            Assert.Equal(0, json.Cost); // Weird
         }
 
         [Theory]
@@ -91,6 +92,65 @@ namespace LiftPassPricingTests
             Assert.Equal(expectedCost, json.Cost);
         }
 
+        /* dimensions:                                     40
+         *      J / N                                       2
+         *      age: 5-, 6-13, 14-64, 65+, null             5
+         *      no date / Monday / vacation monday / other  4                  
+         */
+
+        [Theory]
+        [InlineData("1jour", "2019-02-11", 5, 0)]
+        [InlineData("1jour", "2019-02-11", 10, 25)]
+        [InlineData("1jour", "2019-02-11", 35, 23)]
+        [InlineData("1jour", "2019-02-11", 65, 18)]
+        [InlineData("1jour", "2019-02-11", null, 23)]
+        [InlineData("1jour", "2019-02-12", 5, 0)]
+        [InlineData("1jour", "2019-02-12", 10, 25)]
+        [InlineData("1jour", "2019-02-12", 35, 35)]
+        [InlineData("1jour", "2019-02-12", 65, 27)]
+        [InlineData("1jour", "2019-02-12", null, 35)]
+        [InlineData("1jour", "2019-02-18", 5, 0)]
+        [InlineData("1jour", "2019-02-18", 10, 25)]
+        [InlineData("1jour", "2019-02-18", 35, 35)]
+        [InlineData("1jour", "2019-02-18", 65, 27)]
+        [InlineData("1jour", "2019-02-18", null, 35)]
+        [InlineData("1jour", null, 5, 0)]
+        [InlineData("1jour", null, 10, 25)]
+        [InlineData("1jour", null, 35, 35)]
+        [InlineData("1jour", null, 65, 27)]
+        [InlineData("1jour", null, null, 35)]
+        [InlineData("night", "2019-02-11", 5, 0)]
+        [InlineData("night", "2019-02-11", 10, 19)]
+        [InlineData("night", "2019-02-11", 35, 19)]
+        [InlineData("night", "2019-02-11", 65, 8)]
+        [InlineData("night", "2019-02-11", null, 0)]
+        [InlineData("night", "2019-02-12", 5, 0)]
+        [InlineData("night", "2019-02-12", 10, 19)]
+        [InlineData("night", "2019-02-12", 35, 19)]
+        [InlineData("night", "2019-02-12", 65, 8)]
+        [InlineData("night", "2019-02-12", null, 0)]
+        [InlineData("night", "2019-02-18", 5, 0)]
+        [InlineData("night", "2019-02-18", 10, 19)]
+        [InlineData("night", "2019-02-18", 35, 19)]
+        [InlineData("night", "2019-02-18", 65, 8)]
+        [InlineData("night", "2019-02-18", null, 0)]
+        [InlineData("night", null, 5, 0)]
+        [InlineData("night", null, 10, 19)]
+        [InlineData("night", null, 35, 19)]
+        [InlineData("night", null, 65, 8)]
+        [InlineData("night", null, null, 0)]
+        public void Master_theory(string type, string date, int? age, int expected)
+        {
+            var response = browser.Get("/prices", with =>
+            {
+                with.Query("type", type);
+                if (date != null) with.Query("date", date);
+                if (age != null) with.Query("age", age.ToString());
+            });
+
+            Assert.Equal(expected, CostIn(response));
+        }
+
         // TODO 2-4, and 5, 6 day pass
 
         private Response ObtainPrice(params string[] keyValuePairs)
@@ -108,6 +168,12 @@ namespace LiftPassPricingTests
             Assert.Equal(HttpStatusCode.OK, result.Result.StatusCode);
 
             return result.Result.Body.DeserializeJson<Response>();
+        }
+
+        private int CostIn(Task<BrowserResponse> task)
+        {
+            var responseObject = task.Result.Body.DeserializeJson<Response>();
+            return responseObject.Cost;
         }
     }
 
