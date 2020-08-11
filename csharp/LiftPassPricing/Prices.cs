@@ -16,13 +16,16 @@ namespace LiftPassPricing
         private const string QueryHolidays = "SELECT * FROM holidays";
         public readonly MySqlConnection connection;
 
-        public Prices()
+        public Prices(IRepository repository = null)
         {
             connection = new MySqlConnection
             {
                 ConnectionString = @"Database=lift_pass;Data Source=localhost;User Id=root;Password=mysql"
             };
             connection.Open();
+
+            if (repository == null)
+                repository = new SqlRepository();
 
             Put("/prices", _ =>
             {
@@ -47,29 +50,29 @@ namespace LiftPassPricing
                 string type = Request.Query["type"];
                 string dateParam = base.Request.Query["date"];
                 DateTime? date = null;
-                if  (dateParam != null) 
+                if (dateParam != null)
                 {
                     date = DateTime.ParseExact(dateParam, "yyyy-MM-dd", CultureInfo.InvariantCulture);
                 };
 
-                double baseCost = GetBaseCost(type);
+                double baseCost = repository.GetBaseCost(type);
 
                 int reduction;
-                
+
                 if (age != null && age < 6)
                 {
                     return "{ \"cost\": 0}";
                 }
                 else
                 {
-                    
+
                     reduction = 0;
 
                     if (!"night".Equals(type))
                     {
                         if (date != null)
                         {
-                            bool isHoliday = this.isHoliday(date.Value);
+                            bool isHoliday = repository.isHoliday(date.Value);
 
                             if (!isHoliday && (int)date?.DayOfWeek == 1)
                             {
@@ -131,6 +134,34 @@ namespace LiftPassPricing
             };
 
         }
+    }
+
+    internal class SqlRepository : IRepository
+    {
+        private const string QueryCostByType = "SELECT cost FROM base_price " + //
+                                               "WHERE type = @type";        
+        private const string QueryHolidays = "SELECT * FROM holidays";
+
+        private MySqlConnection connection;
+
+        public SqlRepository()
+        {
+            this.connection = new MySqlConnection
+            {
+                ConnectionString = @"Database=lift_pass;Data Source=localhost;User Id=root;Password=mysql"
+            };
+            this.connection.Open();
+        }
+
+        public double GetBaseCost(string type)
+        {
+            using (var costCmd = new MySqlCommand(QueryCostByType, connection))
+            {
+                costCmd.Parameters.AddWithValue("@type", type);
+                costCmd.Prepare();
+                return (int)costCmd.ExecuteScalar();
+            };
+        }
 
         public bool isHoliday(DateTime date)
         {
@@ -154,16 +185,6 @@ namespace LiftPassPricing
             }
 
             return false;
-        }
-
-        public double GetBaseCost(string type)
-        {
-            using (var costCmd = new MySqlCommand(QueryCostByType, connection))
-            {
-                costCmd.Parameters.AddWithValue("@type", type);
-                costCmd.Prepare();
-                return (int)costCmd.ExecuteScalar();
-            }
         }
     }
 }
